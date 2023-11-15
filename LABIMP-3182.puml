@@ -11,20 +11,34 @@ participant "Airflow Webserver" as webserver
 
 req -> endPoint:Post Request to /airflow/dag/create with\n flag export_format=vertexai
 endPoint -> gcs:Download the labellerr-compatible.json using json_file_path
-gcs -> endPoint: Returning the labellerr-compatible.json
+gcs --> endPoint: Returning the labellerr-compatible.json
 endPoint -> cdn:Download the raw images from GCS via cdn using the project_id\n and labellerr_json_path
 cdn -> gcs: Request to download the raw images
-gcs -> endPoint: Returning Raw Images
+gcs --> endPoint: Returning Raw Images
 
 endPoint -> gcsClient: Uploading the raw images inside Client's GCS bucket using client's\n service account and client specified bucket name
-gcsClient -> endPoint: If the uploading fails : response upload fails, service account or bucket name needs to be updated
-endPoint -> req: Export failed due to access or permission\n denied or bucket doesn't exist
+activate gcsClient
+gcsClient --> endPoint: pass
+alt Uploading Failed
+    gcsClient --> endPoint: Unable to upload because of invalid service accout or bucket name
+    endPoint --> req: Export failed due to access or permission\n denied or bucket doesn't exist
+    deactivate gcsClient
+end
 
 endPoint -> endPoint: Create the JSONL using labellerr-compatible.json, training:prediction ratio provided by the client\n and the gcs uri of the raw images uploaded in the previous step
 endPoint -> gcsClient: Uploading the JSONL inside Client's GCS bucket using client's service account and client specified bucket name.
 
 endPoint -> endPoint: Create the DAG i.e. paste the generic DAG script stored inside a seperate folder into the /dags folder of airflow, \nwith the updated DAG ID, Dataset Name, JSONL URI uploaded in the previous step etc.
+
+loop (DAG Not Created)
+activate webserver
 endPoint -> webserver: Check if the DAG is created using the DAG List feature and the DAG ID
-endPoint -> webserver: If the DAG is with the specified DAG ID is created, Trigger it.
-webserver -> endPoint: Response : DAG ID and DAG Run ID
+webserver --> endPoint: pass
+alt DAG Not Created
+    webserver --> endPoint: DAG is not created yet
+    deactivate webserver
+end
+end
+endPoint -> webserver: Trigger the DAG with the specified DAG ID
+webserver --> endPoint: Response : DAG ID and DAG Run ID
 @enduml

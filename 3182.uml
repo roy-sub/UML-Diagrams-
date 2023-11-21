@@ -1,0 +1,51 @@
+@startuml
+title /airflow/dag/create : Sequence Diagram
+autonumber
+actor "Front-end client\ \nA POST request" as req
+
+participant "Export Service" as exp
+participant "Airflow VM" as air
+participant "Firestore" as fir
+participant "CDN" as cdn
+participant "Labellerr GCS" as gcs
+participant "Client GCS" as gcsClient
+
+req -> exp: Post Request to /exportFiles API
+exp -> exp: Control goes to the exportFiles controller
+exp -> exp: Create the export report
+exp -> fir: Store the export report inside the Export Collection in Firestore
+fir --> exp: Return Report ID
+exp -> exp: Creates the labellerr-compatible.json for the export format = verrtexai
+exp -> gcs: Upload the file to Labellerr GCS bucket labellerr export for export format = vertexAI
+
+exp -> exp: Run the validation on labellerr-compatible.json for vertexAI and 
+exp -> fir: Update the result export report
+fir --> exp: Return report ID
+exp -> gcs: Upload the updated labellerr-compatible.json to Labellerr GCS bucket labellerr export for export format = vertexAI
+exp -> gcs: Delete the old labellerr-compatible.json
+
+exp -> air: Hit Post Request to the airflow/dag/create API with appropriate payload
+air -> gcs: Download the updated labellerr-compatible.json using json_file_path
+gcs --> air: Returning the updated labellerr-compatible.json
+air -> cdn: Download the raw images from GCS via cdn using the project_id and labellerr_json_path, in the local / VM
+cdn -> gcs: Request to download the raw images
+gcs --> air: Returning Raw Images
+air -> gcsClient: Uploading the raw images inside Client's GCS bucket using client's service account and client specified bucket name
+air -> air: Create the JSONL using labellerr-compatible.json, training:prediction ratio provided by the client and the gcs uri of the raw images uploaded in the previous step
+air -> gcsClient: Uploading the JSONL inside Client's GCS bucket using client's service account and client specified bucket name.
+air -> air: Create the DAG i.e. paste the generic DAG script stored inside a seperate folder into the /dags folder of airflow, with the updated DAG ID, Dataset Name, JSONL URI uploaded in the previous step etc.
+
+loop (DAG Not Created : Loop 5 min)
+activate air
+air -> air: Check if the DAG is created using the DAG List feature and the DAG ID
+air --> air: pass
+alt DAG Not Created
+    air --> air: DAG is not created yet
+    deactivate air
+end
+end
+
+air -> air: Trigger the DAG with the specified DAG ID
+air -> air: Hit the next Custom API *
+
+@enduml

@@ -21,31 +21,42 @@ exp -> gcs: Upload the file to Labellerr GCS bucket labellerr export for export 
 exp -> exp: Run the validation on labellerr-compatible.json for vertexAI and 
 exp -> fir: Update the result export report
 fir --> exp: Return report ID
+exp --> req: Return Report ID to the UI
 exp -> gcs: Upload the updated labellerr-compatible.json to Labellerr GCS bucket labellerr export for export format = vertexAI
 exp -> gcs: Delete the old labellerr-compatible.json
 
 exp -> air: Hit Post Request to the airflow/dag/create API with appropriate payload
+air --> exp: Response Success
 air -> gcs: Download the updated labellerr-compatible.json using json_file_path
+air -> fir: Update the Export Report to : Downloading labellerr-compatibel.json
 gcs --> air: Returning the updated labellerr-compatible.json
 air -> cdn: Download the raw images from GCS via cdn using the project_id and labellerr_json_path, in the local / VM
+air -> fir: Update the Export Report to : Downloading Raw Images
 cdn -> gcs: Request to download the raw images
 gcs --> air: Returning Raw Images
 air -> gcsClient: Uploading the raw images inside Client's GCS bucket using client's service account and client specified bucket name
+air -> fir: Update the Export Report to : Uploading Raw Images to Client GCS Bucket
 air -> air: Create the JSONL using labellerr-compatible.json, training:prediction ratio provided by the client and the gcs uri of the raw images uploaded in the previous step
+air -> fir: Update the Export Report to : Creating JSONL
 air -> gcsClient: Uploading the JSONL inside Client's GCS bucket using client's service account and client specified bucket name.
+air -> fir: Update the Export Report to : Uploading JSONL to Client GCS Bucket
 air -> air: Create the DAG i.e. paste the generic DAG script stored inside a seperate folder into the /dags folder of airflow, with the updated DAG ID, Dataset Name, JSONL URI uploaded in the previous step etc.
+air -> fir: Update the Export Report to : Generating the DAG
 
-loop (DAG Not Created : Loop 5 min)
+loop (DAG Not Created : Loop 2 mins)
 activate air
 air -> air: Check if the DAG is created using the DAG List feature and the DAG ID
 air --> air: pass
+air -> fir: Update the Export Report to : DAG is Created
 alt DAG Not Created
     air --> air: DAG is not created yet
+    air -> fir: Update the Export Report to : is_cpmpleted=true and failure_reason= DAG Creation Failed
     deactivate air
 end
 end
 
 air -> air: Trigger the DAG with the specified DAG ID
+air -> fir: Update the Export Report to : Triggered the DAG
 air -> air: Hit the next Custom API *
 
 @enduml

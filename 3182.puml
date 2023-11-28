@@ -1,5 +1,5 @@
 @startuml
-title /airflow/dag/create : Sequence Diagram
+title /airflow/dag/run : Sequence Diagram
 autonumber
 actor "Front-end client\ \nA POST request" as req
 
@@ -25,7 +25,7 @@ exp --> req: Return Report ID to the UI
 exp -> gcs: Upload the updated labellerr-compatible.json to Labellerr GCS bucket labellerr export for export format = vertexAI
 exp -> gcs: Delete the old labellerr-compatible.json
 
-exp -> air: Hit Post Request to the airflow/dag/create API with appropriate payload
+exp -> air: Hit Post Request to the /airflow/dag/run API with appropriate payload
 air --> exp: Response Success
 air -> gcs: Download the updated labellerr-compatible.json using json_file_path
 air -> fir: Update the Export Report to : Downloading labellerr-compatibel.json
@@ -57,6 +57,19 @@ end
 
 air -> air: Trigger the DAG with the specified DAG ID
 air -> fir: Update the Export Report to : Triggered the DAG
-air -> air: Hit the next Custom API *
+
+activate air
+air -> air: Use on_success_callback to check if the entire DAG ran successfully and on_failure_callback to check if any Task failed
+
+air --> air: pass : on_success_callback
+air -> fir: Update the Export Report to : DAG Run Successfully
+
+alt Any Task Failed : on_failure_callback
+    air -> fir: Update the Export Report to : DAG Run Failed
+    deactivate air
+end 
+
+air -> air: Delete the DAG
+air -> fir : Update the Export Report to : Export Successfull
 
 @enduml
